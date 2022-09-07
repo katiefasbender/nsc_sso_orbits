@@ -3,17 +3,17 @@
 # AUTHORS: Katie Fasbender
 #          katiefasbender@montana.edu
 
-# nsc_instcal_meas_main.py will run the NSC Measurements process on all exposures
-# in a given list on tempest.montana.edu
+# orbit_calc_wrapper.py will execute orbit_calc.py for all tracklets in a given
+# list (cfdr2_tracklet_cat.fits.gz) detected in the NOIRLab Source Catalog.
 
-# This script writes a "job_name.sh" file for an exposure, maintaining "maxjobs" jobs
-# running across defined slurm partitions on tempest.
+# This script writes a "job_name.sh" file for a tracklet, or combination of tracklets,
+# maintaining "maxjobs" jobs running across defined slurm partitions on tempest.msu.montana.edu
 # What that means:
 # - Each "job_name.sh" script written by THIS script includes the command to
-#   run the mmt process on an exposure from provided NSC exposure list (--list)
-# -User defins the slurm partitions (--partition) & how many exposures to process at once (--maxjobs)
-# - This script will cycle through the exposure list, submitting jobs to the slurm queue until
-#   all exposures are analyzed or something goes wrong.
+#   run orbit_calc.py on NSC tracklet(s) (given in --tlist)
+# - The user defins the slurm partitions (--partitions) & how many exposures to process at once (--maxjobs)
+# - This script will cycle through the tracklet list, submitting jobs to the slurm queue until
+#   all tracklets have been processed or something goes wrong.
 
 
 
