@@ -74,7 +74,8 @@ def read_fo_elem(filename):
         - node_err
         - n (mean daily motion)
         - n_err
-        - num_obs (number of observations)
+        - n_obs (number of observations used to calc orbit)
+        - n_tot (total number of tracklet observations)
         - q (perihelion distance) [AU]
         - q_err
         - w (argument of perihelion) [deg]
@@ -89,28 +90,30 @@ def read_fo_elem(filename):
         return None
     lines = readlines(fil)
 
-    object_cat=Table(names=("object_id","a","a_err","e","e_err","h",
+    object_cat=Table(names=("fo_id","a","a_err","e","e_err","h",
                             "inc","inc_err","m","m_err","mean_res","n","n_err",
-                            "node","node_err","num_obs","q","q_err","w","w_err",
+                            "node","node_err","n_obs","n_tot","q","q_err","w","w_err",
                             "sv_x","sv_y","sv_z","sv_vx","sv_vy","sv_vz"),
-                  dtype=["U100","float64","float64","float64","float64","float64",
+                  dtype=["U7","float64","float64","float64","float64","float64",
                          "float64","float64","float64","float64","float64","float64","float64",
-                         "float64","float64","int","float64","float64","float64","float64",
+                         "float64","float64","int","int","float64","float64","float64","float64",
                          "float64","float64","float64","float64","float64","float64"]) # output table (cat)
+    test=False
     # for each object...
     obj_inds = grep(lines,"Orbital elements:",index=True)+[-1]
     for oi in range(0,len(obj_inds)-1):
-        print("oi = ",oi)
         # --------------------
         # get orbital elements
         # --------------------
         # figure out if uncertainties were reported (only if all mmts used)---------
         olines=lines[obj_inds[oi]:obj_inds[oi+1]]
-        if grep(olines,"From",index=True)[0] == 9): uncert=True
+        #print("filename = ",filename, olines[0])
+        if grep(olines,"observations",index=True)[0]==9: uncert=True
         else: uncert=False
         # object name --------------------------------------------------------------
         name_ind = grep(olines,"Name=",index=True)[0]+obj_inds[oi]
         name_str = lines[name_ind].split("$")[1].split("Name=")[-1]
+        if test: print("--------Object ",name_str,"------------")
         try:
             # semimajor axis (a) and ascending node (node) -------------------------
             #node_ind = grep(olines," Node ",index=True)[0]+obj_inds[oi]
@@ -118,54 +121,85 @@ def read_fo_elem(filename):
             semimajor_strs = np.array(olines[node_ind].split("    "))[0].split("+/-")
             semimajor = float(semimajor_strs[0].split("a")[-1])
             if uncert: semimajor_err = float(semimajor_strs[1])
+            else: semimajor_err = -99.99
+            if test: print("uncertainty = ",uncert)
             node_strs = np.array(olines[node_ind].split("    "))[-1].split("+/-")
             node = float(node_strs[0].split("Node")[-1])
             if uncert: node_err = float(node_strs[1])
+            else: node_err = -99.99
+            if test: print("node: ",node,node_err," semimajor: ",semimajor,semimajor_err)
             # eccentricity (e) and inclination (inc) -------------------------------
             #inc_ind = grep(olines,"Incl.",index=True)[0]+obj_inds[oi]
             inc_ind = 6
             ecc_strs = np.array(olines[inc_ind].split("    "))[0].split("+/-")
             ecc = float(ecc_strs[0].split("e")[-1])
-            ecc_err = float(ecc_strs[1])
+            if uncert: ecc_err = float(ecc_strs[1])
+            else: ecc_err = -99.99
             inc_strs = np.array(olines[inc_ind].split("    "))[-1].split("+/-")
-            inc = float(inc_strs[0].split("Incl.")[-1])
-            inc_err = float(inc_strs[1])
+            inc = inc_strs[0].split("Incl")[-1].split("(J2000 ecliptic)")[0]
+            if inc[0]==".": inc = float(inc[1:])
+            else: inc = float(inc)
+            if uncert: inc_err = float(inc_strs[1])
+            else: inc_err = -99.99
+            if test: print("eccentricity: ",ecc,ecc_err," inclination: ",inc,inc_err)
             # mean anomaly (m) -----------------------------------------------------
             #m_ind = grep(olines,"ecliptic",index=True)[0]+obj_inds[oi]
             m_ind = 3
             m_strs = np.array(olines[m_ind].split("    "))[0].split("+/-")
             m = float(m_strs[0].split("M")[-1])
-            m_err = float(m_strs[1])
+            if uncert: m_err = float(m_strs[1])
+            else: m_err = -99.99
+            if test: print("mean anomaly: ",m,m_err)
             # absolute magnitude (h) -----------------------------------------------
             mag_ind = grep(olines,"H=",index=True)[0]+obj_inds[oi]
             mag_str = lines[mag_ind].split("$")[-1].split("H=")[-1]
             mag = float(mag_str)
+            if test: print("magnitude: ",mag)
             # argument of perihelion (w) and mean daily motion (n) -----------------
             #aperi_ind = grep(olines,"Peri. ",index=True)[0]+obj_inds[oi]
             aperi_ind = 4
             n_strs = np.array(olines[aperi_ind].split("    "))[0].split("+/-")
             n = float(n_strs[0].split("n")[-1])
-            n_err = float(n_strs[1])
+            if uncert: n_err = float(n_strs[1])
+            else: n_err = -99.99
             aperi_strs = np.array(olines[aperi_ind].split("    "))[-1].split("+/-")
-            aperi = float(aperi_strs[0].split("Peri.")[-1])
-            aperi_err = float(aperi_strs[1])
+            aperi = aperi_strs[0].split("Peri")[-1]
+            if aperi[0]==".": aperi = float(aperi[1:])
+            else: aperi = float(aperi)
+            if uncert: aperi_err = float(aperi_strs[1])
+            else: aperi_err = -99.99
+            if test: print("arg of peri: ",aperi,aperi_err)
             # perihelion distance (q) ----------------------------------------------
             dperi_ind = grep(olines,"q",index=True)[0]+obj_inds[oi]
             dperi_strs = np.array(lines[dperi_ind].split("+/-"))
-            if len(dperi_strs)>1: dperi_strs = dperi_strs[[0,1]]
-            else: dperi_strs = dperi_strs.split("q")[[1]]
-            dperi = float(dperi_strs[0].split("q")[-1])
-            if len(dperi_strs)>1: dperi_err = float(dperi_strs[1].split("Q")[0])
-            else: dperi_err = "-99.99"
-            # number of observations used (num_obs) --------------------------------
-            nobs_ind = grep(olines,"Full range of obs",index=True)[0]+obj_inds[oi]
-            nobs_str = lines[nobs_ind].split("(")[-1].split(" obs")[0]
-            nobs = int(nobs_str)
+            if uncert:
+                dperi_strs = dperi_strs[[0,1]]
+                dperi = float(dperi_strs[0].split("q")[-1])
+                dperi_err = float(dperi_strs[1].split('Q')[0])
+            else:
+                dperi_strs = [dperi_strs[0].split("q")[1]]
+                dperi = float(dperi_strs[0].split("Q")[0])
+                dperi_err = -99.99
+            if test: print("dperi = ",dperi, dperi_err)
+            # total # observations used (num_obs) and total # obs (n_tot) ----------
+            nobs_ind = grep(olines,"observations",index=True)[0]
+            #if uncert:
+            if olines[nobs_ind][0:4]=="From":
+                nobs_str = (olines[nobs_ind].split("From")[-1]).split("observations")[0]
+                if test: print("nobs_str = ",nobs_str)
+                nobs = int(nobs_str)
+                ntot = nobs
+            else:
+                nobs_strs = olines[nobs_ind].split("of") #[[0,-1]]
+                nobs = int(nobs_strs[0])
+                if test: print("nobs_str = ",nobs)
+                ntot = int(nobs_strs[1].split("observations")[0])
+            if test: print("perihelion: ",dperi,dperi_err," number obs: ",nobs,ntot)
             # mean residuals (mean_res) --------------------------------------------
-            #r_ind = grep(olines,"residual",index=True)[0]+obj_inds[oi]
-            r_ind = 9
-            resid_str = olines[r_ind].split("residual")[-1]
+            r_ind = grep(olines,"residual",index=True)[0]+obj_inds[oi]
+            resid_str = lines[r_ind].split("residual")[-1]
             resid = int(resid_str.split('"')[0])+float(resid_str.split('"')[-1])
+            if test: print("mean residuals: ",resid)
             # state vector (s_x,y,z and s_vx,vy,vz) --------------------------------
             sv_ind = grep(olines,"State vector",index=True)[0]+obj_inds[oi]
             svp_line = lines[(sv_ind+1)]
@@ -176,15 +210,17 @@ def read_fo_elem(filename):
             svv_strs = [svv_line[i:j] for i,j in zip(svv_inds,svv_inds[1:]+[-7])]
             svp = [float(st) for st in svp_strs if st!=""]
             svv = [float(st) for st in svv_strs if st!=""]
+            if test: print("state vector: ",svp,svv)
             # --------------------------
             # add row to object table...
             # --------------------------
-            row=[name_str,semimajor,semimajor_err,ecc,ecc_err,mag,
-                 inc,inc_err,m,m_err,resid,n,n_err,
-                 node,node_err,nobs,dperi,dperi_err,aperi,aperi_err]+svp+svv
+            row=[name_str.strip(),semimajor,semimajor_err,ecc,ecc_err,mag,
+                 inc,inc_err,m,m_err,resid,n,n_err,node,node_err,nobs,ntot,
+                 dperi,dperi_err,aperi,aperi_err]+svp+svv
             object_cat.add_row(row)
         except Exception as e:
-            print("object ",name_str," misbehaving in file ",filename)
+            print("object ",name_str," misbehaving in file ",filename,"----------------------------")
+            #print(olines)
             print("exception = ",e)
     return(object_cat)
 
@@ -205,12 +241,18 @@ if __name__ == "__main__":
     compdir = basedir+"comp"+str(comp)+"/"            # where FO in/output files are
     subdir = compdir+"fgroup_"+sdir+"/"
     # set up tables & files
-    cat_tracklet_filename = filedir+"cfdr"+str(drnum)+"_tracklet_orbs_cat.fits.gz" # tracklet (combo) cat
+    cat_tracklet_filename = filedir+"cfdr"+str(drnum)+"_tracklet_cat_orbs.fits.gz" # tracklet (combo) cat
     cat_tracklets = Table.read(cat_tracklet_filename)
     cat_cols = np.array(cat_tracklets.colnames) # existing catalog columns
     # add necessary columns to tracklet (combo) cat, if not already present ------------------------------------- NECESSARY? 
-    orb_cols = ['residuals','a','mag_abs','q','w','e','inc','asc_node','num_obs','mean_anom',"sv_x","sv_y","sv_z","sv_vx","sv_vy","sv_vz"]
-    orb_dts = ['float64','float64','float64','float64','float64','float64','float64','float64','int','float64','float64','float64','float64','float64','float64','float64']
+    orb_cols = ["fo_id","a","a_err","e","e_err","h",
+                "inc","inc_err","m","m_err","mean_res","n","n_err",
+                "node","node_err","n_obs","n_tot","q","q_err","w","w_err",
+                "sv_x","sv_y","sv_z","sv_vx","sv_vy","sv_vz"]
+    orb_dts = ["U7","float64","float64","float64","float64","float64",
+               "float64","float64","float64","float64","float64","float64","float64",
+               "float64","float64","int","int","float64","float64","float64","float64",
+               "float64","float64","float64","float64","float64","float64"]
     for cl in range(len(orb_cols)):
         if orb_cols[cl] not in cat_cols:
             cat_tracklets[orb_cols[cl]] = Column(np.zeros(len(cat_tracklets)),dtype=orb_dts[cl])
@@ -228,7 +270,6 @@ if __name__ == "__main__":
                 dat = read_fo_elem(fname)
                 if len(dat)>0:
                     orbit_info = vstack([orbit_info,dat])
-    orbit_info['fo_id'] = orbit_info['object_id'].astype("U7")
     matches,cat_ind,orbinfo_ind = np.intersect1d(Column(cat_tracklets['fo_id']),Column(orbit_info['fo_id']),return_indices=True)
     for col in orb_cols:
         cat_tracklets[col][cat_ind] = orbit_info[col][orbinfo_ind]
