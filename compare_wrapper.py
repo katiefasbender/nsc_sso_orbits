@@ -121,8 +121,9 @@ if __name__ == "__main__":
         inputlist = inputlist[0]
 
     # Establish necessary directories - figure out for tempest
-    basedir = "/home/x25h971/orbits_dr2/"
+    basedir = "/home/x25h971/orbits/"
     localdir = basedir+"files/"
+    outdir = basedir+"dr2/comp"+str(comp)+"/"
     outfiledir = basedir+"outfiles/"                     # a place for the job files
     makedir(outfiledir)
     t0 = time.time()
@@ -174,7 +175,7 @@ if __name__ == "__main__":
 
     # Check the tracklet input list for Find_Orb output files
     #--------------------------------------------------------
-    rootLogger.info('Checking on the tracklets')
+    rootLogger.info('Checking on the paths to analyze...')
     jstr = lstr.copy()
     jstr['outfile'] = Column(length=len(lstr),dtype="U100")
     jstr['cmd'] = Column(length=len(lstr),dtype="U1000")

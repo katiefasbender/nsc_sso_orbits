@@ -304,24 +304,29 @@ if __name__=="__main__":
     parser.add_argument('--comp', type=str, nargs=1, help='Comparison number')
     parser.add_argument('--tracklets',type=str,nargs=1,help="Delimited lislt of tracklets' ID(s)")
     parser.add_argument('--foids',type=str,nargs=1,help="Delimited lislt of tracklets' Find_Orb ID(s)")
+    parser.add_argument('--testid',type=str,nargs=1,help="Delimited lislt of tracklets' test ids ID(s)") # when a path is created to be tested
     parser.add_argument('--pix32s', type=str, nargs=1, default=1, help='HEALPix value(s) (NSIDE=32) of tracklet(s) location')
-    #parser.add_argument('--hgfiles',type=str,nargs=1,default=None,help='Unique hgroup32 filenames with tracklet(s) mmts')
     parser.add_argument('-c','--combine', action='store_true', help='Combine the input tracklets (treat as one object)')
     parser.add_argument('-r','--redo', action='store_true', help='Redo tracklets that were previously processed')
     args = parser.parse_args()
 
     # Inputs
-    tracklets = args.tracklets[0].split(",") # the tracklet id(s) to calculate orbit(s) for
+    tracklets = args.tracklets[0].split(",") # the tracklet id(s) to calculate orbit(s) for (index#.pix128)
     fo_ids = args.foids[0].split(',')        # the tracklet fo_id(s) to calculate orbit(s) for
+    test_id = args.testid[0]
+    testid = "p"+str(int(test_id)).zfill(6)
+    #paths = args.paths[0].split(',')
     comp = args.comp[0]                      # 0 = individual tracklets, 1 = pairs, 2 = so on
     pix32 = args.pix32s[0].split(',')        # if tracklets in multiple pix32s, will be in fmt "pix32.<tracklet_#>"
     tracklet_sdirs = [int(i.split(".")[-1])//1000 for i in tracklets]
-    mpc_files = list(np.unique([int(i.split(".")[-1])//1000 for i in tracklets]))
-    #mpc_files = args.hgfiles[0].split(',')   # files with tracklet mmt MPC lines (hgroup128)
+    mpc_files = list(np.unique([int(i.split(".")[-1])//1000 for i in tracklets])) #get a list of unique pix128 where tracklets are
     redo = args.redo
     combine = args.combine
-    basedir = "/home/x25h971/orbits_dr2/"
-    outdir = basedir+"comp"+comp+"/fgroup_"  # +str(fo_id//10000) added later in code, for fo output
+
+    # Directories
+    basedir = "/home/x25h971/orbits/"
+    outdir = basedir+"dr2/comp"+comp+"/"  # +str(fo_id//10000) added later in code, for fo output
+    cfdir = "/home/x25h971/canfind_dr2/" 
     t0 = time.time()
 
     #print("mpc_files = ",mpc_files)
@@ -332,7 +337,7 @@ if __name__=="__main__":
         print("file = ",fil,", time = ",time.time())
         ftbools = np.array(tracklet_sdirs)==fil
         file_tlets = list(np.array(tracklets)[ftbools]) # tracklet mmtss found in file
-        ftable = read_cfmpc80("/home/x25h971/canfind_dr2/concats/cf_dr2_hgroup_"+str(fil)+".txt",specific=True,tlets=file_tlets)
+        ftable = read_cfmpc80(cfdir+"concats/cf_dr2_hgroup_"+str(fil)+".txt",specific=True,tlets=file_tlets)
         print("ftable = \n",ftable)
         if ftable: hgroups_cat = vstack([hgroups_cat,ftable])
         #print("file = ",fil," time = ",time.time())
@@ -341,9 +346,11 @@ if __name__=="__main__":
     ## --for each tracklet (or tracklet combo), get Find_Orb (fo) info--
     ##--------------------------------------------------------------------
     #print("arbitrary test point 1 ",time.time())
-    fo_hgroup32 = outdir + str(int(fo_ids[0][1:])//10000)
+    if combine: fo_hgroup32 = outdir+"hgroup32_"+str(int(pix32[0])//1000)
+    else: fo_hgroup32 = outdir + "fgroup_" + str(int(fo_ids[0][1:])//10000)
     makedir(fo_hgroup32)
-    fo_filebase = fo_hgroup32+"/fo_comp"+str(comp)+"_"+str(fo_ids[0]).split("t")[-1]
+    if combine: fo_filebase = fo_hgroup32+"/fo_comp"+str(comp)+"_"+str(pix32[0])+"."+str(test_id)
+    else: fo_filebase = fo_hgroup32+"/fo_comp"+str(comp)+"_"+str(fo_ids[0]).split("t")[-1]
     fo_infile = fo_filebase+".txt" # fo input file, change pair_id to fo_id
     if os.path.exists(fo_infile): os.remove(fo_infile)
     fo_file = open(fo_infile,'w')
@@ -351,8 +358,12 @@ if __name__=="__main__":
     fo_outfile_ephem = fo_filebase+"_ephem.txt" # fo output file (ephemeris)
     fo_outfile_cobs = fo_filebase+"_cobs.txt"   # fo output file (calculated observations)
 
+    # Write a text file to submit to Find_Orb
     tracklet_mmts = Table()
-    if combine: indiv_orbit_elems=Table()
+    ##if combine: # First, we're combining the tracklets or paths as a "test path", get individual elems
+    ##    indiv_orbit_elems=Table()
+    ##    for path in np.unique(paths):
+    ##        elems = read_fo_elem()
     for foid,tid in zip(fo_ids,tracklets): # for each tracklet,
         # get mmt MPC80col lines for all tracklets (from hgroups_cat),
         # and write lines to a text file to put into Find_Orb
@@ -364,7 +375,8 @@ if __name__=="__main__":
             #indiv_elems = read_fo_elem(indiv_elem_file)
         lines = t_mmts['line']
         for ln in lines:
-            fo_file.write("     "+foid+" "+ln+"\n")
+            if combine: fo_file.write("     "+testid+" "+ln+"\n")
+            else: fo_file.write("     "+foid+" "+ln+"\n")
         tracklet_mmts = vstack([tracklet_mmts,t_mmts])
     fo_file.close() # finish writing the fo input file
     print("Find_Orb input file ",fo_infile," written")
@@ -374,17 +386,36 @@ if __name__=="__main__":
     # our output ephemeris, to add to the fo command
     if combine:
         # Figure out timespan for ephemeris reporting
+        print("tracklet mjd = ",tracklet_mmts['mjd'][0])
         mjd = Time(tracklet_mmts['mjd'][0],format="mjd",scale="utc") #***********MAY BE INCORRECT
-        dmjd = tracklet_mmts['mjd'][-1]-tracklet_mmts['mjd'][0]
-        ephem_start = " EPHEM_START "+str(mjd.datetime.year)+" "+str(mjd.datetime.month)+" "+str(mjd.datetime.day)+" 0:00"
-        if dmjd<=5: stepsize = "1h" # [hr] if >5 days btw tracklets, 1 hr btwn ephemeris pts
-        elif dmj>5 and dmjd<=10: stepsize = "12h" # [hr]
-        elif dmj>10: stepsize = "1d" # [days]
-        ephem_step_size = " EPHEM_STEP_SIZE "+str(stepsize)
-        nsteps= int(dmjd/(int(stepsize[:-1])/24))
-        ephem_steps = " EPHEM_STEPS "+str(nsteps)
+        print("tracklet datetime = ",mjd.datetime)
+        dmjd = tracklet_mmts['mjd'][-1]-tracklet_mmts['mjd'][0] #daays
+        print("dmjd = ",dmjd)
+        ephem_start = ' "EPHEM_START='+str(mjd.datetime.year)+' '+str(mjd.datetime.month).zfill(2)+' '+str(mjd.datetime.day).zfill(2)+' '+str(mjd.datetime.hour).zfill(2)+':'+str(mjd.datetime.minute).zfill(2)+'"'    #" 0:00"
+        if dmjd<=(1/24):
+            stepsize="5m"
+            nsteps= int(dmjd/(float(stepsize[:-1])/60/24))
+
+        elif dmjd>(1/24) and dmjd<=1:
+            stepsize = "30m"
+            nsteps= int(dmjd/(float(stepsize[:-1])/60/24))
+
+        elif dmjd>1.0 and dmjd<=5:
+            stepsize = "4h" # [hr] if >5 days btw tracklets, 1 hr btwn ephemeris pts
+            nsteps= int(dmjd/(float(stepsize[:-1])/24))
+
+        elif dmj>5.0 and dmjd<=10:
+            stepsize = "12h" # [hr]
+            nsteps= int(dmjd/(float(stepsize[:-1])/24))
+
+        elif dmj>10.0:
+            stepsize = "24h" # [hr]
+            nsteps= int(dmjd/(float(stepsize[:-1])/24))
+
+        ephem_step_size = " EPHEM_STEP_SIZE="+str(stepsize)
+        ephem_steps = " EPHEM_STEPS="+str(nsteps)
         # Setup Find_Orb command inputs for outfiles
-        combine_arg = " -c"    # treat tracklets as same object
+        combine_arg = " " #" -c"    # treat tracklets as same object
         elem_arg = " -g "+fo_outfile_elem
         ephem_arg = " -e "+fo_outfile_ephem+ephem_start+ephem_steps+ephem_step_size
         cobs_arg = " -F "+fo_outfile_cobs
@@ -398,7 +429,7 @@ if __name__=="__main__":
     print(fo_infile," (Find_Orb input file) written, running Find_Orb on tracklet(s)")
 
     # --Write & run Find_Orb command--
-    fo_cmd = "fo "+fo_infile+elem_arg+ephem_arg+cobs_arg+combine_arg
+    fo_cmd = "fo "+fo_infile+elem_arg+cobs_arg+ephem_arg+combine_arg
     print(fo_cmd)
     fo_info= subprocess.getoutput(fo_cmd)
     print("Find_Orb output = \n",fo_info)
