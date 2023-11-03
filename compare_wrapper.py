@@ -71,6 +71,8 @@ if __name__ == "__main__":
     # Inputs
     comp = args.comp[0]                       # 0 = individual tracklets, 1 = pairs, 2 = so on
     redo = args.redo
+    if redo: rdo = " -r"
+    else: rdo = " "
     combine = args.combine
     partitions=args.partitions[0].split(',')  # the slurm partitions to submit jobs to
     npar=len(partitions)                      # number of slurm partitions
@@ -105,7 +107,7 @@ if __name__ == "__main__":
     ssecond = str(int(ltime[5]))
     if ltime[5]<10: ssecond='0'+ssecond
     logtime = smonth+sday+syear+shour+sminute+ssecond
-    lfile_base = localdir+'lists/runfiles/comp1.'+logtime
+    lfile_base = localdir+'lists/runfiles/comp1_calc.'+logtime
     logfile = lfile_base+'.log'
 
     # Set up logging to screen and logfile
@@ -119,7 +121,7 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    rootLogger.info("Calculating orbits for NSC tracklets")
+    rootLogger.info("Calculating orbits for NSC tracklet combinations (paths)")
     rootLogger.info("partitions = "+str(partitions))
     rootLogger.info("redo = "+str(redo))
 
@@ -135,12 +137,12 @@ if __name__ == "__main__":
     all_cols = np.array(lstr.colnames)
     cols = np.array([l.split("_")[0] for l in all_cols])
     tlet_cols = "+".join(np.array(["list(lstr['"+l+"'])" for l in all_cols[cols=="tracklets"]]))
+    rootLogger.info(str(len(tlet_cols))+" tracklets per path")
     exec("unique_tlets = np.unique("+tlet_cols+")")
-    tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
-    i,i1,i2 = np.intersect1d(tlets['tracklet_id'],unique_tlets,return_indices=True)
-    tlets[i1]['tracklet_id','fo_id']
+    all_tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
+    ti,ti1,ti2 = np.intersect1d(all_tlets['tracklet_id'],unique_tlets,return_indices=True)
     for l in all_cols[cols=="tracklet"]:
-        lstr["foid_"+(l.split("_")[-1])] = Column()
+        lstr["foid_"+(l.split("_")[-1])] = Column(np.zeros(nlstr))
 
 
     # Set up job structure
@@ -173,12 +175,15 @@ if __name__ == "__main__":
             testid = jstr['path_id'][i]
             outdir = basecir++"comp"+comp+"/hgroup32_"+str(subdir//1000)
             outfile = outdir+"/fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
+            combo = " -c"
         else:
             ind = np.array(list(np.array(range(10))+(10*i)))
             ind = list(ind[ind<ngdobj])
             subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
+            testid="0"
             outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
             outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
+            combo = " "
         jstr['outfile'][ind] = outfile
         # Check if the output already exists.
         if os.path.exists(outfile): jstr['done'][ind] = True
@@ -187,7 +192,9 @@ if __name__ == "__main__":
             tlets = list(jstr['tracklet_id'][ind])
             p32s = [str(i) for i in jstr['pix32'][ind]]
             foids = list(jstr['fo_id'][ind])
-            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklet '+(",".join(list(tlets)))+' --pix32 '+(",".join(list(p32s)))+' --foid '+(",".join(list(foids)))
+            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)
+                                +' --tracklets '+(",".join(list(tlets)))+' --pix32s '+(",".join(list(p32s)))
+                                +' --foids '+(",".join(list(foids)))+" --testid "+str(testid)+combo+rdo
             jstr['torun'][ind] = True
             jstr['partition'][ind] = partions[pt]
             pt+=1
