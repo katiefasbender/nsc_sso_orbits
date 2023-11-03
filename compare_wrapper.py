@@ -134,12 +134,13 @@ if __name__ == "__main__":
     # get Find_Orb IDs (foids)
     all_cols = np.array(lstr.colnames)
     cols = np.array([l.split("_")[0] for l in all_cols])
-    tlet_cols = all_cols[cols=="tracklets"]
-    tlet_cols = np.array(["list(lstr['"+l+"'])" for l in tlet_cols])
-    tlets_all = "+".join(tlet_cols)
-    exec("unique_tlets = np.unique("+tlets_all+")")
+    tlet_cols = "+".join(np.array(["list(lstr['"+l+"'])" for l in all_cols[cols=="tracklets"]]))
+    exec("unique_tlets = np.unique("+tlet_cols+")")
     tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
-    i,i1,i2 = np.intersect1d(tlets['tracklet_id'],unique_tlets)
+    i,i1,i2 = np.intersect1d(tlets['tracklet_id'],unique_tlets,return_indices=True)
+    tlets[i1]['tracklet_id','fo_id']
+    for l in all_cols[cols=="tracklet"]:
+        lstr["foid_"+(l.split("_")[-1])] = Column()
 
 
     # Check the tracklet input list for Find_Orb output files
