@@ -143,8 +143,8 @@ if __name__ == "__main__":
         lstr["foid_"+(l.split("_")[-1])] = Column()
 
 
-    # Check the tracklet input list for Find_Orb output files
-    #--------------------------------------------------------
+    # Set up job structure
+    #----------------------
     rootLogger.info('Checking on the paths to analyze...')
     jstr = lstr.copy()
     jstr['outfile'] = Column(length=len(lstr),dtype="U100")
@@ -156,26 +156,31 @@ if __name__ == "__main__":
     jstr['jobid'] = Column(np.repeat("      -99.99",len(lstr)))
     jstr['cputime'] = Column(length=len(lstr),dtype="U20")
     jstr['jobstatus'] = Column(length=len(lstr),dtype="U30")
-    jstr['partition'] = Column(length=len(lstr),dtype="U30")
     jstr['maxrss'] = Column(length=len(lstr),dtype="U20")
-
+    jstr['partition'] = Column(length=len(lstr),dtype="U30")
     partions = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,cpar)],maxjobs)
     nchan = len(partions)
     pt = 0
-    njobs = (ngdobj//10)+1 # number of potential jobs = number of tracklets/10, OR
-    if combine: njobs = ngdobj                      # = number of tracklet combos
-    for i in range(njobs): # for each set of 10 tracklets or for each tracklet combo,
-        ind = np.array(list(np.array(range(10))+(10*i)))
-        ind = list(ind[ind<ngdobj])
-        if combine: ind = [i]
 
-        # Check if the output already exists.
-        subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
-        if combine: subdir = jstr['comp_id'][i]
-        outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
-        outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
+    # Check the tracklet input list for Find_Orb output files
+    #--------------------------------------------------------
+    if combine: njobs = ngdobj     # number of potential jobs = number of tracklet combos, OR
+    else: njobs = (ngdobj//10)+1   # number of potential jobs = number of tracklets/10
+    for i in range(njobs):
+        if combine: 
+            ind = [i]
+            subdir = jstr['pix32'][i]
+            testid = jstr['path_id'][i]
+            outdir = basecir++"comp"+comp+"/hgroup32_"+str(subdir//1000)
+            outfile = outdir+"/fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
+        else:
+            ind = np.array(list(np.array(range(10))+(10*i)))
+            ind = list(ind[ind<ngdobj])
+            subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
+            outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
+            outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
         jstr['outfile'][ind] = outfile
-        # Does the output file exist?
+        # Check if the output already exists.
         if os.path.exists(outfile): jstr['done'][ind] = True
         # If no outfile exists or yes redo, set up the command
         if (jstr['done'][ind][0]==False) or (redo==True):
