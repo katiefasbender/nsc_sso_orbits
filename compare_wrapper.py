@@ -31,6 +31,8 @@ import subprocess
 import sys
 import time
 
+from slurm_funcs import *
+
 #-----------------------------------------------------------------------------
 # Functions
 #-----------------------------------------------------------------------------
@@ -47,48 +49,6 @@ def makedir(dir):
     '''
     if not os.path.exists(dir):
         os.mkdir(dir)
-
-
-def write_jscript(job_name,partition,cmd,dir):
-    '''writes a SLURM job script to "job_name.sh"
-    Arguments:
-    ----------
-    job_name (str)
-            name of job, job script file
-    partition (str)
-            node/partition the job will run on
-    cmd (str)
-            python command to run exposure
-    dir (str)
-            base directory
-    Returns:
-    --------
-    job_file (str)
-            job filename the job script is written to
-    '''
-    job_file = dir+job_name+".sh"
-    # The following code writes lines to the "job_name.sh" file.
-    # Lines starting with #SBATCH are read by Slurm. Lines starting with ## are comments.
-    # All other lines are read by the shell
-    with open(job_file,'w') as fh:
-        fh.writelines("#!/bin/bash\n")
-        if partition=="priority": fh.writelines("#SBATCH --account=priority-davidnidever\n") #specify account
-        fh.writelines("#SBATCH --job-name="+job_name+"\n")       # job name
-        fh.writelines("#SBATCH --output="+dir+job_name+".out\n") # output file (%j = jobid)
-        fh.writelines("#SBATCH --error="+dir+job_name+".err\n")  # error file
-        fh.writelines("#SBATCH --partition="+partition+"\n")     # queue partition to run the job in
-        fh.writelines("#SBATCH --ntasks=1\n")                    # for running in parallel
-        fh.writelines("#SBATCH --nodes=1\n")                     # number of nodes to allocate
-        fh.writelines("#SBATCH --ntasks-per-node 1\n")           # number of cores to allocate; set with care
-        fh.writelines("#SBATCH --mem=1000\n")                    # memory, set --mem with care!!!!! refer to hyalite quickstart guide
-        fh.writelines("#SBATCH --time=48:00:00\n")               # Maximum job run time
-        fh.writelines("module load Anaconda3\n")                 # load Anaconda module
-        fh.writelines("module load GCC\n")                       # load GCC module
-        fh.writelines("source activate $HOME/condaenv/\n")       # activate conda environment
-        fh.writelines(cmd+"\n")                                  # python cmnd to calculate tracklet(S) orbit
-        fh.writelines("conda deactivate")
-    return job_file
-
 
 #-----------------------------------------------------------------------------
 # Main Code
@@ -109,28 +69,27 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Inputs
-    comp = args.comp[0]                      # 0 = individual tracklets, 1 = pairs, 2 = so on
+    comp = args.comp[0]                       # 0 = individual tracklets, 1 = pairs, 2 = so on
     redo = args.redo
     combine = args.combine
     partitions=args.partitions[0].split(',')  # the slurm partitions to submit jobs to
-    npar=len(partitions)                     # number of slurm partitions
-    maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
-    cpar = maxjobs//npar                     # number of job channels kept running on each partition
-    inputlist = args.tlist                    # list of exposures to analyze
+    npar=len(partitions)                      # number of slurm partitions
+    maxjobs = int(args.maxjobs[0])            # maximum number of jobs to maintain running at any time
+    cpar = maxjobs//npar                      # number of job channels kept running on each partition
+    inputlist = args.list                     # list of paths to analyze
     if inputlist is not None:
         inputlist = inputlist[0]
 
-    # Establish necessary directories - figure out for tempest
+    # Establish necessary directories
     basedir = "/home/x25h971/orbits/"
     localdir = basedir+"files/"
     outdir = basedir+"dr2/comp"+str(comp)+"/"
     outfiledir = basedir+"outfiles/"                     # a place for the job files
-    makedir(outfiledir)
     t0 = time.time()
 
-    # Log File
-    #---------
-    # Create Log file name;
+    # Log File name format
+    #----------------
+    # Create runfile name;
     # format is nsc_combine_main.DATETIME.log
     ltime = time.localtime()
     # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)
@@ -146,7 +105,8 @@ if __name__ == "__main__":
     ssecond = str(int(ltime[5]))
     if ltime[5]<10: ssecond='0'+ssecond
     logtime = smonth+sday+syear+shour+sminute+ssecond
-    logfile = basedir+'orbit_wrapper.'+logtime+'.log'
+    lfile_base = localdir+'lists/runfiles/comp1.'+logtime
+    logfile = lfile_base+'.log'
 
     # Set up logging to screen and logfile
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
@@ -168,9 +128,18 @@ if __name__ == "__main__":
     rootLogger.info('Using input list: '+inputlist)
     lstr = Table.read(inputlist)
     nlstr = dln.size(lstr)
-    rootLogger.info(str(nlstr)+' objects')
+    rootLogger.info(str(nlstr)+' paths to analyze')
     gdobj = np.arange(nlstr)
     ngdobj = nlstr
+    # get Find_Orb IDs (foids)
+    all_cols = np.array(lstr.colnames)
+    cols = np.array([l.split("_")[0] for l in all_cols])
+    tlet_cols = all_cols[cols=="tracklets"]
+    tlet_cols = np.array(["list(lstr['"+l+"'])" for l in tlet_cols])
+    tlets_all = "+".join(tlet_cols)
+    exec("unique_tlets = np.unique("+tlets_all+")")
+    tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
+    i,i1,i2 = np.intersect1d(tlets['tracklet_id'],unique_tlets)
 
 
     # Check the tracklet input list for Find_Orb output files
@@ -234,7 +203,7 @@ if __name__ == "__main__":
 
     # Start submitting jobs
     #----------------------
-    runfile = basedir+'/orbit_wrapper.'+logtime+'_run.fits'
+    runfile = lfile_base+'_run.fits.gz'
     Table(jstr).write(runfile)
     jb = 0
     jb_flag = 0
