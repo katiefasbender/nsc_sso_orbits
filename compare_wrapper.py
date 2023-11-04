@@ -190,8 +190,8 @@ if __name__ == "__main__":
         # If no outfile exists or yes redo, set up the command
         if (jstr['done'][ind][0]==False) or (redo==True):
             if combine:
-                tlets = 
-                p32s = []
+                tlets = [jstr[i][0] for i in tlet_cols]
+                p32s = np.repeat(jstr['pix32'][ind],len(tlet_cols))
                 foids = np.repeat("0",len(tlet_cols))            
             else:
                 tlets = list(jstr['tracklet_id'][ind])
