@@ -173,16 +173,16 @@ if __name__ == "__main__":
             ind = [i]
             subdir = jstr['pix32'][i]
             testid = jstr['path_id'][i]
-            outdir = basecir++"comp"+comp+"/hgroup32_"+str(subdir//1000)
-            outfile = outdir+"/fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
+            outdir = basedir+"comp"+comp+"/hgroup32_"+str(subdir//1000)+"/"
+            outfile = outdir+"fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
             combo = " -c"
         else:
             ind = np.array(list(np.array(range(10))+(10*i)))
             ind = list(ind[ind<ngdobj])
             subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
             testid="0"
-            outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
-            outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
+            outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)+"/"
+            outfile = outdir+"fo_comp"+str(comp)+"_"+str(subdir)+".txt"
             combo = " "
         jstr['outfile'][ind] = outfile
         # Check if the output already exists.
@@ -197,9 +197,7 @@ if __name__ == "__main__":
                 tlets = list(jstr['tracklet_id'][ind])
                 p32s = [str(i) for i in jstr['pix32'][ind]]
                 foids = list(jstr['fo_id'][ind])
-            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)
-                                +' --tracklets '+(",".join(list(tlets)))+' --pix32s '+(",".join(list(p32s)))
-                                +' --foids '+(",".join(list(foids)))+" --testid "+str(testid)+combo+rdo
+            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join(list(tlets)))+' --pix32s '+(",".join(list(p32s)))+' --foids '+(",".join(list(foids)))+" --testid "+str(testid)+combo+rdo
             jstr['torun'][ind] = True
             jstr['partition'][ind] = partions[pt]
             pt+=1
