@@ -223,7 +223,7 @@ if __name__ == "__main__":
     #----------------------
     runfile = lfile_base+'_run.fits.gz'
     Table(jstr).write(runfile)
-    jb = 0
+    jb = 0            # to count jobs
     jb_flag = 0
     while jb_flag==0: # jb_flag = 1 when (jb < ntorun)
         for part in partions:
@@ -282,6 +282,7 @@ if __name__ == "__main__":
                 if len(next_sub)==0:
                     #jbsub = list(np.array(range(10))+(ntorun-10))
                     #if combine: jbsub = list(ntorun-1)
+                    print("no more jobs to submit")
                     if len(jstr[torun]['done']==1) == ntorun: jb_flag = 1
                 else:
                     jbsub = list(np.sort(next_sub)[0:10])
