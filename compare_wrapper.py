@@ -31,6 +31,8 @@ import subprocess
 import sys
 import time
 
+from slurm_funcs import *
+
 #-----------------------------------------------------------------------------
 # Functions
 #-----------------------------------------------------------------------------
@@ -47,48 +49,6 @@ def makedir(dir):
     '''
     if not os.path.exists(dir):
         os.mkdir(dir)
-
-
-def write_jscript(job_name,partition,cmd,dir):
-    '''writes a SLURM job script to "job_name.sh"
-    Arguments:
-    ----------
-    job_name (str)
-            name of job, job script file
-    partition (str)
-            node/partition the job will run on
-    cmd (str)
-            python command to run exposure
-    dir (str)
-            base directory
-    Returns:
-    --------
-    job_file (str)
-            job filename the job script is written to
-    '''
-    job_file = dir+job_name+".sh"
-    # The following code writes lines to the "job_name.sh" file.
-    # Lines starting with #SBATCH are read by Slurm. Lines starting with ## are comments.
-    # All other lines are read by the shell
-    with open(job_file,'w') as fh:
-        fh.writelines("#!/bin/bash\n")
-        if partition=="priority": fh.writelines("#SBATCH --account=priority-davidnidever\n") #specify account
-        fh.writelines("#SBATCH --job-name="+job_name+"\n")       # job name
-        fh.writelines("#SBATCH --output="+dir+job_name+".out\n") # output file (%j = jobid)
-        fh.writelines("#SBATCH --error="+dir+job_name+".err\n")  # error file
-        fh.writelines("#SBATCH --partition="+partition+"\n")     # queue partition to run the job in
-        fh.writelines("#SBATCH --ntasks=1\n")                    # for running in parallel
-        fh.writelines("#SBATCH --nodes=1\n")                     # number of nodes to allocate
-        fh.writelines("#SBATCH --ntasks-per-node 1\n")           # number of cores to allocate; set with care
-        fh.writelines("#SBATCH --mem=1000\n")                    # memory, set --mem with care!!!!! refer to hyalite quickstart guide
-        fh.writelines("#SBATCH --time=48:00:00\n")               # Maximum job run time
-        fh.writelines("module load Anaconda3\n")                 # load Anaconda module
-        fh.writelines("module load GCC\n")                       # load GCC module
-        fh.writelines("source activate $HOME/condaenv/\n")       # activate conda environment
-        fh.writelines(cmd+"\n")                                  # python cmnd to calculate tracklet(S) orbit
-        fh.writelines("conda deactivate")
-    return job_file
-
 
 #-----------------------------------------------------------------------------
 # Main Code
@@ -109,28 +69,29 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Inputs
-    comp = args.comp[0]                      # 0 = individual tracklets, 1 = pairs, 2 = so on
+    comp = args.comp[0]                       # 0 = individual tracklets, 1 = pairs, 2 = so on
     redo = args.redo
+    if redo: rdo = " -r"
+    else: rdo = " "
     combine = args.combine
     partitions=args.partitions[0].split(',')  # the slurm partitions to submit jobs to
-    npar=len(partitions)                     # number of slurm partitions
-    maxjobs = int(args.maxjobs[0])           # maximum number of jobs to maintain running at any time
-    cpar = maxjobs//npar                     # number of job channels kept running on each partition
-    inputlist = args.tlist                    # list of exposures to analyze
+    npar=len(partitions)                      # number of slurm partitions
+    maxjobs = int(args.maxjobs[0])            # maximum number of jobs to maintain running at any time
+    cpar = maxjobs//npar                      # number of job channels kept running on each partition
+    inputlist = args.list                     # list of paths to analyze
     if inputlist is not None:
         inputlist = inputlist[0]
 
-    # Establish necessary directories - figure out for tempest
+    # Establish necessary directories
     basedir = "/home/x25h971/orbits/"
     localdir = basedir+"files/"
     outdir = basedir+"dr2/comp"+str(comp)+"/"
     outfiledir = basedir+"outfiles/"                     # a place for the job files
-    makedir(outfiledir)
     t0 = time.time()
 
-    # Log File
-    #---------
-    # Create Log file name;
+    # Log File name format
+    #----------------
+    # Create runfile name;
     # format is nsc_combine_main.DATETIME.log
     ltime = time.localtime()
     # time.struct_time(tm_year=2019, tm_mon=7, tm_mday=22, tm_hour=0, tm_min=30, tm_sec=20, tm_wday=0, tm_yday=203, tm_isdst=1)
@@ -146,7 +107,8 @@ if __name__ == "__main__":
     ssecond = str(int(ltime[5]))
     if ltime[5]<10: ssecond='0'+ssecond
     logtime = smonth+sday+syear+shour+sminute+ssecond
-    logfile = basedir+'orbit_wrapper.'+logtime+'.log'
+    lfile_base = localdir+'lists/runfiles/comp1_calc.'+logtime
+    logfile = lfile_base+'.log'
 
     # Set up logging to screen and logfile
     logFormatter = logging.Formatter("%(asctime)s [%(levelname)-5.5s]  %(message)s")
@@ -159,7 +121,7 @@ if __name__ == "__main__":
     rootLogger.addHandler(consoleHandler)
     rootLogger.setLevel(logging.NOTSET)
 
-    rootLogger.info("Calculating orbits for NSC tracklets")
+    rootLogger.info("Calculating orbits for NSC tracklet combinations (paths)")
     rootLogger.info("partitions = "+str(partitions))
     rootLogger.info("redo = "+str(redo))
 
@@ -168,13 +130,23 @@ if __name__ == "__main__":
     rootLogger.info('Using input list: '+inputlist)
     lstr = Table.read(inputlist)
     nlstr = dln.size(lstr)
-    rootLogger.info(str(nlstr)+' objects')
+    rootLogger.info(str(nlstr)+' paths to analyze')
     gdobj = np.arange(nlstr)
     ngdobj = nlstr
+    all_cols = np.array(lstr.colnames)
+    cols = np.array([l.split("_")[0] for l in all_cols])
+    tlet_cols = "+".join(np.array(["list(lstr['"+l+"'])" for l in all_cols[cols=="tracklets"]]))
+    rootLogger.info(str(len(tlet_cols))+" tracklets per path")
+    # get Find_Orb IDs (foids) (incomplete and unecessary, so i'll leave it that way)
+    #exec("unique_tlets = np.unique("+tlet_cols+")")
+    #all_tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
+    #ti,ti1,ti2 = np.intersect1d(all_tlets['tracklet_id'],unique_tlets,return_indices=True)
+    #for l in all_cols[cols=="tracklet"]:
+    #    lstr["foid_"+(l.split("_")[-1])] = Column(np.zeros(nlstr))
 
 
-    # Check the tracklet input list for Find_Orb output files
-    #--------------------------------------------------------
+    # Set up job structure
+    #----------------------
     rootLogger.info('Checking on the paths to analyze...')
     jstr = lstr.copy()
     jstr['outfile'] = Column(length=len(lstr),dtype="U100")
@@ -186,33 +158,48 @@ if __name__ == "__main__":
     jstr['jobid'] = Column(np.repeat("      -99.99",len(lstr)))
     jstr['cputime'] = Column(length=len(lstr),dtype="U20")
     jstr['jobstatus'] = Column(length=len(lstr),dtype="U30")
-    jstr['partition'] = Column(length=len(lstr),dtype="U30")
     jstr['maxrss'] = Column(length=len(lstr),dtype="U20")
-
+    jstr['partition'] = Column(length=len(lstr),dtype="U30")
     partions = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,cpar)],maxjobs)
     nchan = len(partions)
     pt = 0
-    njobs = (ngdobj//10)+1 # number of potential jobs = number of tracklets/10, OR
-    if combine: njobs = ngdobj                      # = number of tracklet combos
-    for i in range(njobs): # for each set of 10 tracklets or for each tracklet combo,
-        ind = np.array(list(np.array(range(10))+(10*i)))
-        ind = list(ind[ind<ngdobj])
-        if combine: ind = [i]
 
-        # Check if the output already exists.
-        subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
-        if combine: subdir = jstr['comp_id'][i]
-        outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
-        outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
+    # Check the tracklet input list for Find_Orb output files
+    #--------------------------------------------------------
+    if combine: njobs = ngdobj     # number of potential jobs = number of tracklet combos, OR
+    else: njobs = (ngdobj//10)+1   # number of potential jobs = number of tracklets/10
+    for i in range(njobs):
+        if combine: 
+            ind = [i]
+            subdir = jstr['pix32'][i]
+            testid = jstr['path_id'][i]
+            outdir = basecir++"comp"+comp+"/hgroup32_"+str(subdir//1000)
+            outfile = outdir+"/fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
+            combo = " -c"
+        else:
+            ind = np.array(list(np.array(range(10))+(10*i)))
+            ind = list(ind[ind<ngdobj])
+            subdir = int(jstr['fo_id'][ind[0]].split("t")[1])//10
+            testid="0"
+            outdir = basedir+"comp"+comp+"/fgroup_"+str(subdir//1000)
+            outfile = outdir+"/fo_comp"+str(comp)+"_"+str(subdir)+".txt"
+            combo = " "
         jstr['outfile'][ind] = outfile
-        # Does the output file exist?
+        # Check if the output already exists.
         if os.path.exists(outfile): jstr['done'][ind] = True
         # If no outfile exists or yes redo, set up the command
         if (jstr['done'][ind][0]==False) or (redo==True):
-            tlets = list(jstr['tracklet_id'][ind])
-            p32s = [str(i) for i in jstr['pix32'][ind]]
-            foids = list(jstr['fo_id'][ind])
-            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklet '+(",".join(list(tlets)))+' --pix32 '+(",".join(list(p32s)))+' --foid '+(",".join(list(foids)))
+            if combine:
+                tlets = [jstr[i][0] for i in tlet_cols]
+                p32s = np.repeat(jstr['pix32'][ind],len(tlet_cols))
+                foids = np.repeat("0",len(tlet_cols))            
+            else:
+                tlets = list(jstr['tracklet_id'][ind])
+                p32s = [str(i) for i in jstr['pix32'][ind]]
+                foids = list(jstr['fo_id'][ind])
+            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)
+                                +' --tracklets '+(",".join(list(tlets)))+' --pix32s '+(",".join(list(p32s)))
+                                +' --foids '+(",".join(list(foids)))+" --testid "+str(testid)+combo+rdo
             jstr['torun'][ind] = True
             jstr['partition'][ind] = partions[pt]
             pt+=1
@@ -234,9 +221,9 @@ if __name__ == "__main__":
 
     # Start submitting jobs
     #----------------------
-    runfile = basedir+'/orbit_wrapper.'+logtime+'_run.fits'
+    runfile = lfile_base+'_run.fits.gz'
     Table(jstr).write(runfile)
-    jb = 0
+    jb = 0            # to count jobs
     jb_flag = 0
     while jb_flag==0: # jb_flag = 1 when (jb < ntorun)
         for part in partions:
@@ -248,21 +235,22 @@ if __name__ == "__main__":
             # get index & status of last job submitted
             last_sub = list(partition_ind & submitted_ind)
             if len(last_sub)==0:
-                lsub = list(np.sort(list(partition_ind))[0:10])
                 if combine: lsub = list(np.sort(list(partition_ind))[0])
+                else: lsub = list(np.sort(list(partition_ind))[0:10])
             else:
-                lsub = list(np.sort(last_sub)[-10:])
                 if combine: lsub = list(np.sort(last_sub)[-1])
+                else: lsub = list(np.sort(last_sub)[-10:])
             lj_id = jstr[torun[lsub[0]]]['jobid']
             last_jname = jstr[torun[lsub[0]]]['jobname']
             if last_jname!='':
-                lj_info = (subprocess.getoutput("sacct -n -P --delimiter=',' --format state,jobid --name "+last_jname).split("\n")[0]).split(",")
+                lj_info = sacct_cmd(last_jname,['state','jobid'],c=False,m=False)
+                #lj_info = (subprocess.getoutput("sacct -n -P --delimiter=',' --format state,jobid --name "+last_jname).split("\n")[0]).split(",")
                 print("last job info = ",lj_info)
                 if len(lj_info)>1:
                     lj_status = lj_info[0].strip()
                     lj_id = lj_info[1].strip()
                 else:
-                    lj_status = "RUNNING"
+                    lj_status = "ERR"
                     lj_id = "-99.99"
             else:
                 lj_status = "NONE" #no jobs have been submitted
@@ -280,18 +268,22 @@ if __name__ == "__main__":
                 print("last job status = ",lj_status)
                 # if last job was completed, get some info about it
                 if lj_status=="COMPLETED":
-                    ljinfo = (subprocess.getoutput("sacct -n -P --delimiter=',' --format cputimeraw,maxrss --jobs "+lj_id)).split("\n")[-1].split(",")
+                    ljinfo = sacct_cmd(last_jname,['cputimeraw','maxrss'],c=True,m=False)
+                    #ljinfo = (subprocess.getoutput("sacct -n -P --delimiter=',' --format cputimeraw,maxrss --jobs "+lj_id)).split("\n")[-1].split(",")
                     jstr['done'] = True
                     print("last job info = ",ljinfo)
                     if len(ljinfo)>1:
                         jstr['cputime'][torun[lsub]] = ljinfo[0]
                         jstr['maxrss'][torun[lsub]] = ljinfo[1]
-
+                else:
+                    if combine: jstr['submitted'][torun[lsub]] = False
                 # get index & info of next job to submit
                 next_sub = list(partition_ind & unsubmitted_ind)
                 if len(next_sub)==0:
-                    jbsub = list(np.array(range(10))+(ntorun-10))
-                    if combine: jbsub = list(ntorun-1)
+                    #jbsub = list(np.array(range(10))+(ntorun-10))
+                    #if combine: jbsub = list(ntorun-1)
+                    print("no more jobs to submit")
+                    if len(jstr[torun]['done']==1) == ntorun: jb_flag = 1
                 else:
                     jbsub = list(np.sort(next_sub)[0:10])
                     if combine: jbsub = list(np.sort(next_sub)[0])
@@ -303,8 +295,8 @@ if __name__ == "__main__":
 
                 # --Write job script to file--
                 job_name = 'orbc'+str(comp)+"_"+str(logtime)+'_'+str(jb)
-                job_file=write_jscript(job_name,partition,cmd,outfiledir)
-
+                #job_file=write_jscript(job_name,partition,cmd,outfiledir)
+                job_file = write_jscript(job_name,jb,partition,cmd,outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="1G",rtime="02:00:00",parallel=False)
                 # --Submit job to slurm queue--
                 os.system("sbatch %s" %job_file)
                 jstr['submitted'][torun[jbsub]] = True

@@ -303,8 +303,8 @@ if __name__=="__main__":
     parser = ArgumentParser(description='Calculate orbit of tracklet(s) with Find_Orb')
     parser.add_argument('--comp', type=str, nargs=1, help='Comparison number')
     parser.add_argument('--tracklets',type=str,nargs=1,help="Delimited lislt of tracklets' ID(s)")
-    parser.add_argument('--foids',type=str,nargs=1,help="Delimited lislt of tracklets' Find_Orb ID(s)")
-    parser.add_argument('--testid',type=str,nargs=1,help="Delimited lislt of tracklets' test ids ID(s)") # when a path is created to be tested
+    parser.add_argument('--foids',type=str,nargs=1,help="Delimited lislt of tracklets' Find_Orb ID(s), if comp0")
+    parser.add_argument('--testid',type=str,nargs=1,help="Delimited lislt of tracklets' test ids ID(s), if comp1+") # when a path is created to be tested
     parser.add_argument('--pix32s', type=str, nargs=1, default=1, help='HEALPix value(s) (NSIDE=32) of tracklet(s) location')
     parser.add_argument('-c','--combine', action='store_true', help='Combine the input tracklets (treat as one object)')
     parser.add_argument('-r','--redo', action='store_true', help='Redo tracklets that were previously processed')
@@ -364,6 +364,7 @@ if __name__=="__main__":
     ##    indiv_orbit_elems=Table()
     ##    for path in np.unique(paths):
     ##        elems = read_fo_elem()
+    if combine: fo_ids = np.repeat("0",len(tracklets))
     for foid,tid in zip(fo_ids,tracklets): # for each tracklet,
         # get mmt MPC80col lines for all tracklets (from hgroups_cat),
         # and write lines to a text file to put into Find_Orb
