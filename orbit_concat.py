@@ -232,24 +232,28 @@ if __name__ == "__main__":
     # --Initiating & Defining--
     # -------------------------
     # grab inputs
-    sdir = str(sys.argv[1])                           # fgroup subdir#
-    drnum = str(sys.argv[2])                          # NSC DR#
-    comp = str(sys.argv[3])                           # comparison number
+    sdir = str(sys.argv[1])               # fgroup subdir# or path hgroup32
+    drnum = str(sys.argv[2])              # NSC DR#
+    comp = str(sys.argv[3])               # comparison number
+    if len(sys.argv)>4: combine=True
+    else: combine=False
     # define directory structure
-    basedir = "/home/x25h971/orbits_dr"+drnum+"/"     # base location of operations
-    filedir = basedir+"files/"                        # where scripts and concat catalogs go
-    compdir = basedir+"comp"+str(comp)+"/"            # where FO in/output files are
+    basedir = "/home/x25h971/orbits/"                  # base location of operations
+    filedir = basedir+"files/"                         # where scripts and concat catalogs go
+    compdir = basedir+"dr"+drnum+"/comp"+str(comp)+"/" # where FO in/output files are
     subdir = compdir+"fgroup_"+sdir+"/"
     # set up tables & files
     cat_tracklet_filename = filedir+"cfdr"+str(drnum)+"_tracklet_cat_orbs.fits.gz" # tracklet (combo) cat
     cat_tracklets = Table.read(cat_tracklet_filename)
     cat_cols = np.array(cat_tracklets.colnames) # existing catalog columns
-    # add necessary columns to tracklet (combo) cat, if not already present ------------------------------------- NECESSARY? 
-    orb_cols = ["fo_id","a","a_err","e","e_err","h",
+    # add necessary columns to tracklet (combo) cat, if not already present ------------------------------------- NECESSARY?
+    if combine: id_col = "path_id"
+    else: id_col = "fo_id"
+    orb_cols = ["pix32",id_col,"a","a_err","e","e_err","h",
                 "inc","inc_err","m","m_err","mean_res","n","n_err",
                 "node","node_err","n_obs","n_tot","q","q_err","w","w_err",
                 "sv_x","sv_y","sv_z","sv_vx","sv_vy","sv_vz"]
-    orb_dts = ["U7","float64","float64","float64","float64","float64",
+    orb_dts = ["int","U7","float64","float64","float64","float64","float64",
                "float64","float64","float64","float64","float64","float64","float64",
                "float64","float64","int","int","float64","float64","float64","float64",
                "float64","float64","float64","float64","float64","float64"]

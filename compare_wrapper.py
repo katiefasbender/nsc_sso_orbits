@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # Establish necessary directories
     basedir = "/home/x25h971/orbits/"
     localdir = basedir+"files/"
-    outdir = basedir+"dr2/comp"+str(comp)+"/"
+    odir = basedir+"dr2/comp"+str(comp)+"/"
     outfiledir = basedir+"outfiles/"                     # a place for the job files
     t0 = time.time()
 
@@ -135,8 +135,9 @@ if __name__ == "__main__":
     ngdobj = nlstr
     all_cols = np.array(lstr.colnames)
     cols = np.array([l.split("_")[0] for l in all_cols])
-    tlet_cols = "+".join(np.array(["list(lstr['"+l+"'])" for l in all_cols[cols=="tracklets"]]))
-    rootLogger.info(str(len(tlet_cols))+" tracklets per path")
+    gd_cols = np.array(["list(lstr['"+l+"'])" for l in all_cols[cols=="tracklet"]])
+    tlet_cols = "+".join(gd_cols)
+    rootLogger.info(str(len(gd_cols))+" tracklets per path")
     # get Find_Orb IDs (foids) (incomplete and unecessary, so i'll leave it that way)
     #exec("unique_tlets = np.unique("+tlet_cols+")")
     #all_tlets = Table.read(localdir+"lists/comp0/cfdr2_tracklet_cat_orbs.fits.gz") # all tracklets 
@@ -169,12 +170,13 @@ if __name__ == "__main__":
     if combine: njobs = ngdobj     # number of potential jobs = number of tracklet combos, OR
     else: njobs = (ngdobj//10)+1   # number of potential jobs = number of tracklets/10
     for i in range(njobs):
+        if i%100000==0: print(i,"/",njobs)
         if combine: 
             ind = [i]
             subdir = jstr['pix32'][i]
             testid = jstr['path_id'][i]
-            outdir = basedir+"comp"+comp+"/hgroup32_"+str(subdir//1000)+"/"
-            outfile = outdir+"fo_comp"+str(comp)+"_pix"+str(subdir)+"_"+str(path_id)+".txt"
+            outdir = odir+"hgroup32_"+str(int(subdir//1000))+"/"
+            outfile = outdir+"fo_comp"+str(comp)+"_"+str(int(subdir))+"."+str(int(testid))+".txt"
             combo = " -c"
         else:
             ind = np.array(list(np.array(range(10))+(10*i)))
@@ -185,19 +187,22 @@ if __name__ == "__main__":
             outfile = outdir+"fo_comp"+str(comp)+"_"+str(subdir)+".txt"
             combo = " "
         jstr['outfile'][ind] = outfile
+        if i%1000==0: print(outfile)
         # Check if the output already exists.
         if os.path.exists(outfile): jstr['done'][ind] = True
         # If no outfile exists or yes redo, set up the command
         if (jstr['done'][ind][0]==False) or (redo==True):
             if combine:
-                tlets = [jstr[i][0] for i in tlet_cols]
-                p32s = np.repeat(jstr['pix32'][ind],len(tlet_cols))
-                foids = np.repeat("0",len(tlet_cols))            
+                tlets = [jstr[i][ind][0] for i in all_cols[cols=="tracklet"]]
+                p32s = np.repeat(int(jstr['pix32'][ind][0]),len(gd_cols))
+                foids = np.repeat("0",len(gd_cols))
             else:
                 tlets = list(jstr['tracklet_id'][ind])
                 p32s = [str(i) for i in jstr['pix32'][ind]]
                 foids = list(jstr['fo_id'][ind])
-            jstr['cmd'][ind] = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join(list(tlets)))+' --pix32s '+(",".join(list(p32s)))+' --foids '+(",".join(list(foids)))+" --testid "+str(testid)+combo+rdo
+            cmd = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join([str(t) for t in tlets]))+' --pix32s '+(",".join([str(p) for p in p32s]))+' --foids '+(",".join([str(f) for f in foids]))+" --testid "+str(testid)+combo+rdo
+            jstr['cmd'][ind] = cmd
+            #if i%50000==0: print(cmd)
             jstr['torun'][ind] = True
             jstr['partition'][ind] = partions[pt]
             pt+=1
@@ -232,14 +237,15 @@ if __name__ == "__main__":
 
             # get index & status of last job submitted
             last_sub = list(partition_ind & submitted_ind)
+            if ntorun<10: time.sleep(sleep_time)
             if len(last_sub)==0:
-                if combine: lsub = list(np.sort(list(partition_ind))[0])
+                if combine: lsub = [np.sort(list(partition_ind))[0]]
                 else: lsub = list(np.sort(list(partition_ind))[0:10])
             else:
-                if combine: lsub = list(np.sort(last_sub)[-1])
+                if combine: lsub = [np.sort(last_sub)[-1]]
                 else: lsub = list(np.sort(last_sub)[-10:])
-            lj_id = jstr[torun[lsub[0]]]['jobid']
-            last_jname = jstr[torun[lsub[0]]]['jobname']
+            lj_id = jstr[torun[lsub]]['jobid'][0]
+            last_jname = jstr[torun[lsub]]['jobname'][0]
             if last_jname!='':
                 lj_info = sacct_cmd(last_jname,['state','jobid'],c=False,m=False)
                 #lj_info = (subprocess.getoutput("sacct -n -P --delimiter=',' --format state,jobid --name "+last_jname).split("\n")[0]).split(",")
@@ -275,7 +281,7 @@ if __name__ == "__main__":
                         jstr['maxrss'][torun[lsub]] = ljinfo[1]
                 else:
                     if combine: jstr['submitted'][torun[lsub]] = False
-                # get index & info of next job to submit
+                # --Get index & info of next job to submit--
                 next_sub = list(partition_ind & unsubmitted_ind)
                 if len(next_sub)==0:
                     #jbsub = list(np.array(range(10))+(ntorun-10))
@@ -283,8 +289,8 @@ if __name__ == "__main__":
                     print("no more jobs to submit")
                     if len(jstr[torun]['done']==1) == ntorun: jb_flag = 1
                 else:
-                    jbsub = list(np.sort(next_sub)[0:10])
-                    if combine: jbsub = list(np.sort(next_sub)[0])
+                    if combine: jbsub = [np.sort(next_sub)[0]]
+                    else: jbsub = list(np.sort(next_sub)[0:10])
 
                 # create and submit the job!
                 cmd = jstr['cmd'][torun[jbsub[0]]]
@@ -294,7 +300,7 @@ if __name__ == "__main__":
                 # --Write job script to file--
                 job_name = 'orbc'+str(comp)+"_"+str(logtime)+'_'+str(jb)
                 #job_file=write_jscript(job_name,partition,cmd,outfiledir)
-                job_file = write_jscript(job_name,jb,partition,cmd,outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="1G",rtime="02:00:00",parallel=False)
+                job_file = write_jscript(job_name,jb,partition,[cmd],outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="1G",rtime="02:00:00",parallel=False)
                 # --Submit job to slurm queue--
                 os.system("sbatch %s" %job_file)
                 jstr['submitted'][torun[jbsub]] = True
