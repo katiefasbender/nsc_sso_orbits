@@ -232,16 +232,17 @@ if __name__ == "__main__":
     # --Initiating & Defining--
     # -------------------------
     # grab inputs
-    sdir = str(sys.argv[1])               # fgroup subdir# or path hgroup32
+    sdir = str(sys.argv[1])               # fgroup subdir# or path hgroup32 subdir#
     drnum = str(sys.argv[2])              # NSC DR#
     comp = str(sys.argv[3])               # comparison number
-    if len(sys.argv)>4: combine=True
+    if len(sys.argv)>4: 
     else: combine=False
     # define directory structure
     basedir = "/home/x25h971/orbits/"                  # base location of operations
     filedir = basedir+"files/"                         # where scripts and concat catalogs go
     compdir = basedir+"dr"+drnum+"/comp"+str(comp)+"/" # where FO in/output files are
-    subdir = compdir+"fgroup_"+sdir+"/"
+    if combine: subdir = compdir+
+    else: subdir = compdir+"fgroup_"+sdir+"/"
     # set up tables & files
     cat_tracklet_filename = filedir+"cfdr"+str(drnum)+"_tracklet_cat_orbs.fits.gz" # tracklet (combo) cat
     cat_tracklets = Table.read(cat_tracklet_filename)

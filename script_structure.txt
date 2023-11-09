@@ -1,0 +1,87 @@
+This repo lives primarily on MSU Tempest, at /home/x25h971/orbits/files
+
+---------------------------------------------
+List of scripts included in "nsc_sso_orbits"
+(Filename, wrapper) described here:
+---------------------------------------------
+- Calculating orbits & test orbits:
+	orbit_calc.py, compare_wrapper.py
+	orbit_concat.py, orbconcat_wrapper.py
+- Generating combinations of tracklets to analyze with Find_Orb:
+	path_link.py, pathlink_wrapper.py
+---------------------------------------------
+
+Description of files & wrappers:
+--------------------------------------------------------------------------
+Calculating orbits & test orbits
+--------------------------------------------------------------------------
+
+orbit_calc.py
+
+    Calculate the initial orbit for a CANFind tracklet, or a combination
+    of CANFind tracklets, with Find_Orb
+	Inputs:
+		[1] tracklets
+		[2] fo_ids (or dummy variables if combining)
+		[3] pix32s of tracklets
+		[4] test_id (if combining, "0" otherwise")
+	Outputs:
+		[1] FO input text file, with MPC 80-col line for each tracklet mmt 
+			[comp0] 10 tracklets in orbits/dr#/comp0/fogroup_<fo//1000>/fo_comp0_foid.txt
+			[comp1+] 1 tracklet combo in orbits/dr#/comp#/hgroup32_<pix32//1000>/fo_comp#_pix32.pathid.txt
+		[2] FO output text file with orbital elements in same repo as input file
+			[comp0] containing one set of elems for each tracklet
+			[comp1] containing one set of elems for the tracklet combination
+
+		
+
+orbit_wrapper.py -> orbcalc_wrapper.py -> compare_wrapper.py
+
+    Wrapper script for orbit_calc.py
+
+--------------------------------------------------------------------------
+
+orbit_concat.py
+
+    Concatenates all output files from orbit_calc.py (Find_Orb outfiles)
+    for a round of tracklet comparisons (comp0,comp1,comp2,etc.), for a
+    given orbits/dr2/comp#/<fo,hgroup32> subdir 
+	Inputs:
+		[1] fgroup subdir# (comp0) or path hgroup32 subdir# (comp1+)
+		[2] NSC DR#
+		[3] comp(arison) number		
+	Outputs:
+		[comp0] adds/updates orbital elem cols of cfdr#_tracklet_cat_orbs.fits.gz
+                [comp1+] writes orbits/files/lists/comp1/hgroup_
+
+orbconcat_wrapper.py
+
+    Wrapper script for orbit_concat.py
+
+--------------------------------------------------------------------------
+ Generating tracklet combinations to analyze with Find_Orb
+--------------------------------------------------------------------------
+
+make_tpair_list.py -> tracklet_link.py -> path_link.py
+
+    Compare all possible pairs of tracklets, determine which ones to
+    test with Find_Orb as a possible singular object
+
+tracklet_link.py -> pathlink_wrapper.py
+
+    Run the orbit_calc.py script for tracklet pairs identified by above
+    script;
+
+--------------------------------------------------------------------------
+Analyzing tracklet combinations with Find_Orb
+--------------------------------------------------------------------------
+
+
+ determine which are valid singular object candidates
+
+--------------------------------------------------------------------------
+
+
+
+
+    
