@@ -63,6 +63,7 @@ if __name__ == "__main__":
     parser.add_argument('--comp', type=str, nargs=1, help='Comparison number')
     parser.add_argument('--list', type=str, nargs=1, help='Filename with list of paths to analyze with orbit_calc.py')
     parser.add_argument('--partitions', type=str, nargs=1, help='List of slurm partitions to use')
+    parser.add_argument('--npaths', type=str, nargs=1, help='Number of paths to analyze per job (in series)')
     parser.add_argument('--maxjobs', type=str, nargs=1, help='Number of jobs to maintain at any given time')
     parser.add_argument('-c','--combine', action='store_true', help='Combine input tracklets of each FO cmd (treat as one object)')
     parser.add_argument('-r','--redo', action='store_true', help='Redo tracklets that were previously processed')
@@ -76,6 +77,7 @@ if __name__ == "__main__":
     combine = args.combine
     partitions=args.partitions[0].split(',')  # the slurm partitions to submit jobs to
     npar=len(partitions)                      # number of slurm partitions
+    npaths = int(args.npaths[0])             # number of paths to analyze per job (in series)
     maxjobs = int(args.maxjobs[0])            # maximum number of jobs to maintain running at any time
     cpar = maxjobs//npar                      # number of job channels kept running on each partition
     inputlist = args.list                     # list of paths to analyze
@@ -83,9 +85,9 @@ if __name__ == "__main__":
         inputlist = inputlist[0]
 
     # Establish necessary directories
-    basedir = "/home/x25h971/orbits/"
-    localdir = basedir+"files/"
-    odir = basedir+"dr2/comp"+str(comp)+"/"
+    basedir = "/home/x25h971/orbits/"                    # base of operations
+    localdir = basedir+"files/"                          # where scripts & lists go
+    odir = basedir+"dr2/comp"+str(comp)+"/"              # where the Find_Orb in/output directories go
     outfiledir = basedir+"outfiles/"                     # a place for the job files
     t0 = time.time()
 
@@ -167,16 +169,17 @@ if __name__ == "__main__":
 
     # Check the tracklet input list for Find_Orb output files
     #--------------------------------------------------------
-    if combine: njobs = ngdobj     # number of potential jobs = number of tracklet combos, OR
-    else: njobs = (ngdobj//10)+1   # number of potential jobs = number of tracklets/10
+    if combine: njobs = (ngdobj//npaths)+1 # number of potential jobs = number of tracklet combos/number of paths per job, OR
+    else: njobs = (ngdobj//10)+1           # number of potential jobs = number of tracklets/10
+    jcount_ind = 0                         # counter to maintian "npaths" per job
     for i in range(njobs):
         if i%100000==0: print(i,"/",njobs)
-        if combine: 
+        if combine:
             ind = [i]
             subdir = jstr['pix32'][i]
             testid = jstr['path_id'][i]
             outdir = odir+"hgroup32_"+str(int(subdir//1000))+"/"
-            outfile = outdir+"fo_comp"+str(comp)+"_"+str(int(subdir))+"."+str(int(testid))+".txt"
+            outfile = outdir+"fo_comp"+str(comp)+"_"+str(int(subdir))+"."+str(int(testid))+"_elem.txt"
             combo = " -c"
         else:
             ind = np.array(list(np.array(range(10))+(10*i)))
@@ -187,7 +190,7 @@ if __name__ == "__main__":
             outfile = outdir+"fo_comp"+str(comp)+"_"+str(subdir)+".txt"
             combo = " "
         jstr['outfile'][ind] = outfile
-        if i%1000==0: print(outfile)
+        #if i%100000==0: print(outfile)
         # Check if the output already exists.
         if os.path.exists(outfile): jstr['done'][ind] = True
         # If no outfile exists or yes redo, set up the command
@@ -204,7 +207,7 @@ if __name__ == "__main__":
             jstr['cmd'][ind] = cmd
             #if i%50000==0: print(cmd)
             jstr['torun'][ind] = True
-            jstr['partition'][ind] = partions[pt]
+            #jstr['partition'][ind] = partions[pt]
             pt+=1
             pt = pt-(pt//nchan)*nchan
 
@@ -214,7 +217,20 @@ if __name__ == "__main__":
     torun,nalltorun = dln.where(jstr['torun'] == True)    # Total number of jobs to run (# exposures)
     ntorun = len(torun)
     njtorun = (ntorun//10)+1
-    if combine: njtorun = ntorun
+    if combine: njtorun = (ntorun//npaths)+1
+
+    njchan = cpar #number of jobs per channel (divide evenly) 
+
+    if ntorun!=0: njchan = (ntorun//nchan)+1
+    rootLogger.info(str(ntorun)+' exposures to process, '+str(maxjobs)+' at a time on '+str(npar)+' slurm partitions.')
+    # Split exposures evenly among defined "partitions" as run with nsc_meas_wrapper
+    chans = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,nchan)],maxjobs) # partions -> chans
+    nchantot = len(chans)
+    expstr['partition'][torun] = [chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)]
+    expstr['job_ind'][torun] = [i%ntorun for i in range(0,ntorun)]
+
+
+
     rootLogger.info(str(ntorun)+" jobs...")
     if ntorun == 0:
         rootLogger.info('No objects to process.')
@@ -293,7 +309,8 @@ if __name__ == "__main__":
                     else: jbsub = list(np.sort(next_sub)[0:10])
 
                 # create and submit the job!
-                cmd = jstr['cmd'][torun[jbsub[0]]]
+                cmd = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join([str(t) for t in tlets]))+' --pix32s '+(",".join([str(p) for p in p32s]))+' --foids '+(",".join([str(f) for f in foids]))+" --testid "+str(testid)+combo+rdo
+                jstr['cmd'][torun[jbsub]] = cmd
                 partition = jstr['partition'][torun[jbsub[0]]].split("_")[0]
                 print("-- Submitting new job--")
 
