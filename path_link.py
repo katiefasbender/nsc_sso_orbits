@@ -57,12 +57,13 @@ if __name__=="__main__":
     # Inputs
     nside = int(args.nside[0])                 # NSIDE of healpix to make list for
     pix = int(args.hp[0])                  # HEALPix (NSIDE = above)
+    comp = args.comp[0]
     pix128s = [int(i) for i in args.hp128[0].split(",")]
     hgroups128 = np.unique([int(int(i)//1000) for i in np.unique(pix128s)])
     basedir = "/home/x25h971/orbits/"
     cfdir = "/home/x25h971/canfind_dr2/concats/"
     fbase = cfdir+"cf_dr2_hgroup_" # the base name for tracklet_concat files
-    outdir = basedir+"files/lists/comp1/"
+    outdir = basedir+"files/lists/comp"+str(comp)+"/"
     print("hgroups = ",hgroups128)
 
     # --get all mmts & tracklets for this pix--
@@ -94,8 +95,10 @@ if __name__=="__main__":
     print("looking at healpix (NSIDE="+str(nside)+") ",pix)
     tpid = 0 #a unique number for each testable tracklet pair in the pix32 (pair_id)
     # a table to hold the tracklet pairs list vvvvv
-    tracklet_pairs = Table(names=("path_0","path_1","hgroup_filename0","hgroup_filename1","pix"+str(nside),"pair_id"),
+    tracklet_pairs = Table(names=("tracklet_0","tracklet_1","foid_0","foid_1","pix"+str(nside),"path_id"),
                            dtype=["U10","U10","U100","U100","float64","U100"])
+    #tracklet_pairs = Table(names=("tracklet_0","tracklet_1","hgroup_filename0","hgroup_filename1","pix"+str(nside),"path_id"),
+    #                       dtype=["U10","U10","U100","U100","float64","U100"])
     if len(tlets)>1:
         tlets['night'] = tlets['mjd']+0.5            # offset obs_time by 1/2 day to get in terms of nights
         mmts['night'] = mmts['mjd']+0.5
@@ -141,11 +144,13 @@ if __name__=="__main__":
                         p2 = pair_tlets['mjd'][0]+pair_tlets['dmjd'][0] < pair_tlets['mjd'][1] # --(mjd_2>=mjd_1+dmjd+1)
                         if p1 and p2:  #keep only the tracklets that pass both conditions
                             #print("adding tracklet pair to list")
-                            hp_subdirs = [int(int(i)//1000) for i in pair_tlets['pix128']]
-                            fname0 = "cf_dr2_hgroup_"+str(hp_subdirs[0])+".txt"
-                            fname1 = "cf_dr2_hgroup_"+str(hp_subdirs[1])+".txt"
+                            #hp_subdirs = [int(int(i)//1000) for i in pair_tlets['pix128']]
+                            #fname0 = "cf_dr2_hgroup_"+str(hp_subdirs[0])+".txt"
+                            #fname1 = "cf_dr2_hgroup_"+str(hp_subdirs[1])+".txt"
+                            #tracklet_pairs.add_row([pair_tlets['tracklet_id'][0],pair_tlets['tracklet_id'][1],
+                            #                        fname0,fname1,pix,str(tpid)])
                             tracklet_pairs.add_row([pair_tlets['tracklet_id'][0],pair_tlets['tracklet_id'][1],
-                                                    fname0,fname1,pix,str(tpid)])
+                                                    pari_tlets['fo_id'][0],pair_tlets['fo_id'][1],pix,str(tpid)])
                             tpid+=1
                 print("pix = ",pix,", ",nnights," unique nights, ",len(tlets)," tracklets, ",
                       len(np.unique(mmts['exposure']))," unique exposures, ",tspan_full," day timespan")

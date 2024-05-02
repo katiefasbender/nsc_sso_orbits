@@ -77,9 +77,9 @@ if __name__ == "__main__":
     combine = args.combine
     partitions=args.partitions[0].split(',')  # the slurm partitions to submit jobs to
     npar=len(partitions)                      # number of slurm partitions
-    npaths = int(args.npaths[0])             # number of paths to analyze per job (in series)
+    npaths = int(args.npaths[0])              # number of paths to analyze per job (in series)
     maxjobs = int(args.maxjobs[0])            # maximum number of jobs to maintain running at any time
-    cpar = maxjobs//npar                      # number of job channels kept running on each partition
+    ncpar = maxjobs//npar                      # number of job channels kept running on each partition
     inputlist = args.list                     # list of paths to analyze
     if inputlist is not None:
         inputlist = inputlist[0]
@@ -152,28 +152,29 @@ if __name__ == "__main__":
     #----------------------
     rootLogger.info('Checking on the paths to analyze...')
     jstr = lstr.copy()
-    jstr['outfile'] = Column(length=len(lstr),dtype="U100")
-    jstr['cmd'] = Column(length=len(lstr),dtype="U1000")
-    jstr['submitted'] = Column(np.repeat(False,len(lstr)))
-    jstr['torun'] = Column(np.repeat(False,len(lstr)))
-    jstr['done'] = Column(np.repeat(False,len(lstr)))
-    jstr['jobname'] = Column(length=len(lstr),dtype="U100")
-    jstr['jobid'] = Column(np.repeat("      -99.99",len(lstr)))
-    jstr['cputime'] = Column(length=len(lstr),dtype="U20")
-    jstr['jobstatus'] = Column(length=len(lstr),dtype="U30")
-    jstr['maxrss'] = Column(length=len(lstr),dtype="U20")
-    jstr['partition'] = Column(length=len(lstr),dtype="U30")
-    partions = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,cpar)],maxjobs)
-    nchan = len(partions)
-    pt = 0
+    jstr['outfile'] = Column(length=nlstr,dtype="U100")
+    jstr['cmd'] = Column(length=nlstr,dtype="U1000")
+    jstr['submitted'] = Column(np.repeat(False,nlstr))
+    jstr['torun'] = Column(np.repeat(False,nlstr))
+    jstr['done'] = Column(np.repeat(False,nlstr))
+    jstr['jobname'] = Column(length=nlstr,dtype="U100")
+    jstr['jobid'] = Column(np.repeat("      -99.99",nlstr))
+    jstr['cputime'] = Column(length=nlstr,dtype="U20")
+    jstr['jobstatus'] = Column(length=nlstr,dtype="U30")
+    jstr['maxrss'] = Column(length=nlstr,dtype="U20")
+    jstr['partition'] = Column(length=nlstr,dtype="U30")
+    jstr['job_ind'] = Column(np.repeat(0,nlstr))
+    #partions = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,cpar)],maxjobs)
+    #nchan = len(partions)
+    #pt = 0
 
     # Check the tracklet input list for Find_Orb output files
     #--------------------------------------------------------
-    if combine: njobs = (ngdobj//npaths)+1 # number of potential jobs = number of tracklet combos/number of paths per job, OR
-    else: njobs = (ngdobj//10)+1           # number of potential jobs = number of tracklets/10
+    if combine: ncmd = ngdobj # number of potential jobs = number of tracklet combos/number of paths per job, OR # was njobs
+    else: ncmd = (ngdobj//10)+1           # number of potential jobs = number of tracklets/10
     jcount_ind = 0                         # counter to maintian "npaths" per job
-    for i in range(njobs):
-        if i%100000==0: print(i,"/",njobs)
+    for i in range(ncmd):
+        if i%50000==0: print(i,"/",ncmd)
         if combine:
             ind = [i]
             subdir = jstr['pix32'][i]
@@ -208,34 +209,28 @@ if __name__ == "__main__":
             #if i%50000==0: print(cmd)
             jstr['torun'][ind] = True
             #jstr['partition'][ind] = partions[pt]
-            pt+=1
-            pt = pt-(pt//nchan)*nchan
+            #pt+=1
+            #pt = pt-(pt//nchan)*nchan
 
     # Parcel out jobs
     #----------------
+    chans = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,ncpar)],maxjobs)
+    nchantot = len(chans)                                 # Total number of job channels = maxjobs
     # Define number of orbits to calculate & total #jobs/partition
-    torun,nalltorun = dln.where(jstr['torun'] == True)    # Total number of jobs to run (# exposures)
-    ntorun = len(torun)
-    njtorun = (ntorun//10)+1
-    if combine: njtorun = (ntorun//npaths)+1
-
-    njchan = cpar #number of jobs per channel (divide evenly) 
-
-    if ntorun!=0: njchan = (ntorun//nchan)+1
-    rootLogger.info(str(ntorun)+' exposures to process, '+str(maxjobs)+' at a time on '+str(npar)+' slurm partitions.')
-    # Split exposures evenly among defined "partitions" as run with nsc_meas_wrapper
-    chans = np.reshape([[i+"_"+str(parchan) for i in partitions] for parchan in range(0,nchan)],maxjobs) # partions -> chans
-    nchantot = len(chans)
-    expstr['partition'][torun] = [chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)]
-    expstr['job_ind'][torun] = [i%ntorun for i in range(0,ntorun)]
-
-
-
-    rootLogger.info(str(ntorun)+" jobs...")
-    if ntorun == 0:
+    torun,nalltorun = dln.where(jstr['torun'] == True)    # Get indices of all paths to run
+    ntorun = len(torun)                                   # Total number of paths to run
+    if combine: njtorun = (ntorun//npaths)+1              # Total number of jobs to run
+    else: njtorun = (ntorun//10)+1
+    if ntorun!=0:                                         # Total number of jobs to run per channel
+        njchan = (ntorun//nchantot)+1
+    else:
         rootLogger.info('No objects to process.')
         sys.exit()
-    rootLogger.info('...on '+str(maxjobs)+' channels across '+str(npar)+' slurm partitions.')
+    # Split exposures evenly among defined "partitions" as run with nsc_meas_wrapper
+    jstr['job_ind'][torun] = [i%ntorun for i in range(0,ntorun)]
+    jstr['partition'][torun] = [chans[j%nchantot] for  j in jstr['job_ind'][torun]]
+    #expstr['partition'][torun] = [chans[(i-maxjobs*(i//maxjobs))] for i in range(ntorun)]
+    rootLogger.info(str(ntorun)+' paths to process, '+str(npaths)+' paths per job at '+str(maxjobs)+' jobs at a time on '+str(npar)+' slurm partitions.')
     sleep_time=10     # seconds to sleep after submitting a job before checking its job id
 
     # Start submitting jobs
@@ -245,7 +240,7 @@ if __name__ == "__main__":
     jb = 0            # to count jobs
     jb_flag = 0
     while jb_flag==0: # jb_flag = 1 when (jb < ntorun)
-        for part in partions:
+        for part in chans:
             rootLogger.info("Checking status of last job submitted to "+part+" channel")
             partition_ind = set(np.where(jstr['partition'][torun]==part)[0])
             submitted_ind = set(np.where(jstr['submitted'][torun]==1)[0])
@@ -255,10 +250,15 @@ if __name__ == "__main__":
             last_sub = list(partition_ind & submitted_ind)
             if ntorun<10: time.sleep(sleep_time)
             if len(last_sub)==0:
-                if combine: lsub = [np.sort(list(partition_ind))[0]]
+                if combine:
+                    lsb = [np.sort(list(partition_ind))[0]]
+                    lsub = list(np.where(jstr[torun]['job_ind']==jstr[torun[lsb]]['job_ind'])[0])
+                    print("last job indices = ",lsub)
                 else: lsub = list(np.sort(list(partition_ind))[0:10])
             else:
-                if combine: lsub = [np.sort(last_sub)[-1]]
+                if combine:
+                    lsb = [np.sort(last_sub)[-1:]]
+                    lsub = list(np.where(jstr[torun]['job_ind']==jstr[torun[lsb]]['job_ind'])[0])
                 else: lsub = list(np.sort(last_sub)[-10:])
             lj_id = jstr[torun[lsub]]['jobid'][0]
             last_jname = jstr[torun[lsub]]['jobname'][0]
@@ -297,6 +297,7 @@ if __name__ == "__main__":
                         jstr['maxrss'][torun[lsub]] = ljinfo[1]
                 else:
                     if combine: jstr['submitted'][torun[lsub]] = False
+
                 # --Get index & info of next job to submit--
                 next_sub = list(partition_ind & unsubmitted_ind)
                 if len(next_sub)==0:
@@ -305,19 +306,23 @@ if __name__ == "__main__":
                     print("no more jobs to submit")
                     if len(jstr[torun]['done']==1) == ntorun: jb_flag = 1
                 else:
-                    if combine: jbsub = [np.sort(next_sub)[0]]
+                    if combine:
+                        jbsb = [np.sort(next_sub)[0]]
+                        jbsub = list(np.where(jstr[torun]['job_ind']==jstr[torun[jbsb]]['job_ind'])[0])
+                        print("next job indices = ",jbsub)
                     else: jbsub = list(np.sort(next_sub)[0:10])
 
                 # create and submit the job!
-                cmd = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join([str(t) for t in tlets]))+' --pix32s '+(",".join([str(p) for p in p32s]))+' --foids '+(",".join([str(f) for f in foids]))+" --testid "+str(testid)+combo+rdo
-                jstr['cmd'][torun[jbsub]] = cmd
+                #cmd = 'python '+localdir+'orbit_calc.py --comp '+str(comp)+' --tracklets '+(",".join([str(t) for t in tlets]))+' --pix32s '+(",".join([str(p) for p in p32s]))+' --foids '+(",".join([str(f) for f in foids]))+" --testid "+str(testid)+combo+rdo
+                #jstr['cmd'][torun[jbsub]] = cmd
+                cmds = list(jstr['cmd'][torun[jbsub]])
                 partition = jstr['partition'][torun[jbsub[0]]].split("_")[0]
                 print("-- Submitting new job--")
 
                 # --Write job script to file--
                 job_name = 'orbc'+str(comp)+"_"+str(logtime)+'_'+str(jb)
                 #job_file=write_jscript(job_name,partition,cmd,outfiledir)
-                job_file = write_jscript(job_name,jb,partition,[cmd],outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="1G",rtime="02:00:00",parallel=False)
+                job_file = write_jscript(job_name,jb,partition,cmds,outfiledir,"katiefasbender@montana.edu",cpupt=2,mempc="1G",rtime="02:00:00",parallel=False)
                 # --Submit job to slurm queue--
                 os.system("sbatch %s" %job_file)
                 jstr['submitted'][torun[jbsub]] = True

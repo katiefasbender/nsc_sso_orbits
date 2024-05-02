@@ -611,3 +611,43 @@ def read_fo_ephem(filename):
     ephem_table['elong'] = ephem_dat['elong'].astype("float")
     ephem_table['ph_ang'] = ephem_dat['ph_ang'].astype("float")
     return(ephem_table)
+
+
+
+
+def unpack_desig(ppd):
+
+    '''Unpacks a packed provisional designation, as
+       explained here https://www.minorplanetcenter.net/iau/info/PackedDes.html
+       currently only written for numbered minor planets
+    Arguments
+    ---------
+        ppd (str)
+            Packed Permanent/Provisional Designation
+    '''
+    b62chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    datechars = "IJK"
+    #print("ppd = ",ppd)
+    # Permanent designation, for minor planet numbers and comet designations and natural satellites.
+    if len(ppd)==5:
+        otype = "num_minor_planet"
+        if np.char.isdigit(ppd.strip()): 
+            pd = ppd                # cases 1-99,999 are The Number itself
+        elif np.char.isalpha(ppd[0]) and np.char.isdigit(ppd[1:]):
+            pd = ((b62chars.index(ppd[0]))*10000)+int(ppd[1:])            # cases 100,000-619,999
+        elif ppd[0]=="~":
+            pd = np.sum([b62chars.index(i)*(62**r) for i,r in zip(ppd[1:],[3,2,1,0])])+620000 # cases 620,000+
+        elif np.char.isdigit(ppd[:4]) and (ppd[4]=="P" or ppd[4]=="D"):
+            otype=ppd[4]+"_comet"
+            pd = ppd
+        elif np.char.isalpha(ppd[0]) and ppd[-1]=="S" and np.char.isdigit(ppd[1:-1]):
+            otype=ppd[0]+"_natsat"
+            pd = ppd
+    # Provisional designation, for .....................(Unfinished)
+    elif len(ppd)==7:
+        if ppd[0]=="I" or ppd[0]=="J" or ppd[0]=="K":
+            otype="provis_minor_planet"
+            if np.char.isalpha(ppd[4]):month_order = str((b62chars.index(ppd[4])*10)+int(ppd[5]))
+            else: month_order = str(int(ppd[4:6]))
+            pd = str((datechars.index(ppd[0])+18))+str(int(ppd[1:3]))+" "+ppd[3]+ppd[6]+month_order
+    return(pd,otype)
